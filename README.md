@@ -68,7 +68,9 @@ tools/ocr/              worker scripts run inside the OCR virtual environment
 docs/                   explanations, plans, work logs, reports, review (index: docs/README.md)
 data/corpus/            public test PDFs, included (untrusted input; see data/README.md and data/corpus/README.md)
 output/                 parser output for every test PDF (Excel) + summary table
-report.pdf, chat.pdf    one-page project report; the conversation the project was built in (tools/make_report.py, tools/text_to_pdf.py)
+report.pdf              one-page project report (tools/make_report.py)
+chat.pdf                the full conversation the project was built in (tools/text_to_pdf.py)
+chat_briefed.pdf        the same conversation: only the prompts (blue) and final answers (tools/chat_brief.py)
 AGENT.md                working rules for the coding agent (binding)
 ```
 
