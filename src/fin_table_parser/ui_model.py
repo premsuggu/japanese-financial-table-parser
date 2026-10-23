@@ -123,7 +123,7 @@ def findings_frame(findings: Sequence[Finding]) -> pd.DataFrame:
 
 
 def table_health(table: Table) -> tuple[str, dict[str, int]]:
-    """('ok' | 'check' | 'unsupported' | 'unverified', counts) for one table, from its own checks.
+    """('ok' | 'review' | 'check' | 'unsupported' | 'unverified', counts) for one table.
 
     'ok' needs positive evidence: at least one accounting check that passed (the numbers hang
     together). A table on which no check could run is 'unverified', never 'ok'.
@@ -141,7 +141,17 @@ def table_health(table: Table) -> tuple[str, dict[str, int]]:
         for f in findings
         if f.status in ("PASS", "PASS_ROUNDING") and f.check != "numeric_matches_raw"
     )
-    return ("ok" if evidence else "unverified"), counts
+    if not evidence:
+        return "unverified", counts
+    return ("review" if needs_review(table) else "ok"), counts
+
+
+def needs_review(table: Table) -> bool:
+    """An OCR-read table whose reads were not compared (or never compared) has not earned a tick.
+
+    The accounting checks cannot see a misread label, so a person should look at such a page.
+    """
+    return str(table.meta.get("route", "")).startswith("ocr") and table.meta.get("reads") != 2
 
 
 def group_health(tables: Sequence[Table]) -> list[tuple[str, dict[str, int]]]:
@@ -172,6 +182,8 @@ def group_health(tables: Sequence[Table]) -> list[tuple[str, dict[str, int]]]:
     out: list[tuple[str, dict[str, int]]] = []
     for t in tables:
         state, counts = group_state[t.kind]
+        if state == "ok" and needs_review(t):
+            state = "review"
         own_unparsed = any(f.status == "FAIL" for f in check_unparsed_cells(t))
         if t.kind not in SUPPORTED_KINDS or own_unparsed:
             state = "unsupported"

@@ -39,6 +39,16 @@ LIABILITIES_EQUITY_TOTALS = {
 }
 
 
+def edit_distance(a: str, b: str) -> int:
+    previous = list(range(len(b) + 1))
+    for i, ca in enumerate(a, start=1):
+        current = [i]
+        for j, cb in enumerate(b, start=1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb)))
+        previous = current
+    return previous[-1]
+
+
 def label_key(label: str) -> str:
     """Comparison key: NFKC with all whitespace removed."""
     return re.sub(r"\s+", "", nfkc(label))

@@ -12,16 +12,18 @@ apart from per-page recognition time.
 
 from __future__ import annotations
 
+import json
 import statistics
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .evaluate import GroundTruth, score_against_truth, truth_from_table
-from .labels import label_key
+from .labels import edit_distance, label_key
 from .models import Table
-from .ocr import OcrEngine, geometry_from_words
-from .pdf_io import page_texts, render_page
+from .normalize import parse_value
+from .ocr import OcrEngine, PixelWord, geometry_from_words
+from .pdf_io import page_texts, render_page, rescale_image
 from .pipeline import parse_ocr_words, parse_page
 from .triage import UnsupportedPage
 from .validate import summarize, validate_tables
@@ -72,16 +74,6 @@ def find_silver_pages(
         step = (len(pages) - 1) / max(1, limit - 1)
         pages = [pages[round(i * step)] for i in range(limit)]
     return pages
-
-
-def edit_distance(a: str, b: str) -> int:
-    previous = list(range(len(b) + 1))
-    for i, ca in enumerate(a, start=1):
-        current = [i]
-        for j, cb in enumerate(b, start=1):
-            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb)))
-        previous = current
-    return previous[-1]
 
 
 @dataclass
@@ -203,6 +195,68 @@ def run_bakeoff(engines: Sequence[OcrEngine], pages: Sequence[SilverPage]) -> Ba
     return out
 
 
+ReadKey = tuple[str, str, float]  # (page name, condition, rescale factor)
+RESCALES = (1.0, 0.75)  # 1.33 was tried too: see docs/reports/phase3-second-read-size.md
+
+
+def collect_reads(
+    engine: OcrEngine,
+    pages: Sequence[SilverPage],
+    cache: Path | None = None,
+    factors: Sequence[float] = RESCALES,
+) -> dict[ReadKey, list[PixelWord]]:
+    """OCR words of every page under every condition, each image also read after rescaling.
+
+    Words are returned in the pixel frame of the unscaled image, so reads of one page are comparable.
+    The result is cached in a JSON file because reading is slow and the safety-net experiments
+    reuse the same reads many times.
+    """
+    reads: dict[ReadKey, list[PixelWord]] = {}
+    if cache and cache.exists():
+        for key, words in json.loads(cache.read_text(encoding="utf-8")).items():
+            name, cond, factor = key.split("|")
+            reads[(name, cond, float(factor))] = [PixelWord(*w) for w in words]
+    for cname, cond in CONDITIONS.items():
+        dpi = int(cond["dpi"] or 300)
+        todo = [p for p in pages for f in factors if (p.name, cname, f) not in reads]
+        if not todo:
+            continue
+        images = {
+            p.name: render_page(
+                p.pdf,
+                p.page_no,
+                dpi=dpi,
+                rotate_deg=float(cond["rotate_deg"] or 0.0),
+                jpeg_quality=int(cond["jpeg_quality"]) if cond["jpeg_quality"] else None,
+            )
+            for p in pages
+        }
+        for f in factors:
+            missing = [p for p in pages if (p.name, cname, f) not in reads]
+            if not missing:
+                continue
+            batch = engine.read_images(
+                [rescale_image(images[p.name], f) if f != 1.0 else images[p.name] for p in missing]
+            )
+            for p, words in zip(missing, batch.pages, strict=True):
+                reads[(p.name, cname, f)] = [
+                    PixelWord(w.text, w.x0 / f, w.y0 / f, w.x1 / f, w.y1 / f) for w in words
+                ]
+            if cache:
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_text(
+                    json.dumps(
+                        {
+                            f"{n}|{c}|{fa}": [[w.text, w.x0, w.y0, w.x1, w.y1] for w in ws]
+                            for (n, c, fa), ws in reads.items()
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+    return reads
+
+
 def render_markdown(bake: Bakeoff, pages: Sequence[SilverPage], sizes: dict[str, str]) -> str:
     engines = sorted({r.engine for r in bake.results})
     lines = [
@@ -238,4 +292,175 @@ def render_markdown(bake: Bakeoff, pages: Sequence[SilverPage], sizes: dict[str,
         lines += [f"- {r.engine} {r.page} {r.condition}: {r.error}" for r in errors[:10]] + [""]
     if sizes:
         lines += ["## Disk footprint", ""] + [f"- {k}: {v}" for k, v in sizes.items()] + [""]
+    return "\n".join(lines)
+
+
+# ------------------------------------------------------------ safety-net evaluation
+
+
+def labels_by_document(pdfs: Sequence[Path]) -> dict[str, set[str]]:
+    """Label keys of every statement page that passes all its checks, per document."""
+    from .labelcheck import table_labels
+    from .pdf_io import page_count
+
+    statement_kinds = {"balance_sheet", "income_statement", "comprehensive_income", "cash_flow"}
+    out: dict[str, set[str]] = {}
+    for pdf in pdfs:
+        labels: set[str] = set()
+        for page in range(page_count(pdf)):
+            try:
+                table = parse_page(pdf, page)
+            except UnsupportedPage:
+                continue
+            counts = summarize(validate_tables([table]))
+            if table.kind in statement_kinds and counts["FAIL"] == 0 and counts["PASS"] > 0:
+                labels |= {
+                    k for k in table_labels([table]) if len(k) <= 30 and not set(k) & set("。「」")
+                }
+        out[pdf.parent.name] = labels
+    return out
+
+
+@dataclass
+class SafetyRun:
+    page: str
+    condition: str
+    wrong: bool  # the OCR table differs from the silver reference
+    wrong_cells: int
+    checks_fail: bool  # an accounting check failed (what exists today)
+    label_flags: int
+    label_hits: int  # flags that point at a label that really is wrong
+    agree_flags: int
+    agree_hits: int  # flags that point at a cell/label that really is wrong
+    second_failed: bool = False
+
+
+def _meanings(raws: Sequence[str]) -> list[tuple[object, ...] | None]:
+    out: list[tuple[object, ...] | None] = []
+    for x in raws:
+        v = parse_value(x) if x else None
+        out.append((v.kind, v.number, v.negative_zero) if v else None)
+    return out
+
+
+def _truth_cells(truth: GroundTruth) -> dict[str, tuple[str, ...]]:
+    seen: dict[str, tuple[str, ...]] = {}
+    dup: set[str] = set()
+    for r in truth.rows:
+        k = label_key(r.label)
+        if k in seen:
+            dup.add(k)
+        seen[k] = tuple(v or "" for v in r.values)
+    return {k: v for k, v in seen.items() if k not in dup}
+
+
+def safety_runs(
+    pages: Sequence[SilverPage],
+    reads: dict[ReadKey, list[PixelWord]],
+    lexicons: dict[str, frozenset[str]],
+    second_factor: float,
+) -> list[SafetyRun]:
+    """Score the two detectors against the silver reference, on cached reads.
+
+    ``lexicons`` maps a page's document directory to the label list used for that page, so a list
+    can be built without the page's own document.
+    """
+    from .crosscheck import compare_reads
+    from .labelcheck import check_labels
+
+    runs: list[SafetyRun] = []
+    for page in pages:
+        known = _truth_cells(page.truth)
+        for cname, cond in CONDITIONS.items():
+            dpi = int(cond["dpi"] or 300)
+            first_key, second_key = (page.name, cname, 1.0), (page.name, cname, second_factor)
+            if first_key not in reads or second_key not in reads:
+                continue
+            geoms = [
+                geometry_from_words(page.pdf, page.page_no, reads[k], dpi)
+                for k in (first_key, second_key)
+            ]
+            try:
+                t1 = parse_ocr_words(geoms[0], page.pdf.name)
+            except UnsupportedPage:
+                continue
+            try:
+                t2: Table | None = parse_ocr_words(geoms[1], page.pdf.name)
+            except UnsupportedPage:
+                t2 = None
+            scores = score_against_truth(t1, page.truth)
+            # wrong = a value or a label differs in meaning; print-format differences (a space inside
+            # a number, a full-width marker) do not count
+            value, label = scores.metrics["cell.parsed_value"], scores.metrics["row.label"]
+            wrong_cells = (value.total - value.correct) + (label.total - label.correct)
+            wrong = wrong_cells > 0 or scores.rows_pred != scores.rows_truth
+            fail = summarize(validate_tables([t1]))["FAIL"] > 0
+            labels = [f for f in check_labels(t1, lexicons[page.pdf.parent.name])]
+            truth_labels = {label_key(r.label) for r in page.truth.rows}
+            label_hits = sum(label_key(f.row) not in truth_labels for f in labels)
+            agree = compare_reads(t1, t2) if t2 is not None else []
+            agree_hits = 0
+            for f in agree:
+                key = label_key(f.row)
+                if f.column:  # an amount disagreement: is the first read's cell really wrong?
+                    row = next((r for r in t1.rows if label_key(r.label) == key), None)
+                    ref = known.get(key)
+                    if row is not None and ref is not None:
+                        got = tuple(v.raw if v else "" for v in row.values)
+                        agree_hits += _meanings(got) != _meanings(ref)
+                elif (
+                    wrong
+                ):  # a label / missing-row disagreement: counted as a hit when the page is wrong
+                    agree_hits += 1
+            runs.append(
+                SafetyRun(
+                    page.name,
+                    cname,
+                    wrong,
+                    wrong_cells,
+                    fail,
+                    len(labels),
+                    label_hits,
+                    len(agree),
+                    agree_hits,
+                    t2 is None,
+                )
+            )
+    return runs
+
+
+def render_safety(variants: dict[str, list[SafetyRun]], pages: Sequence[SilverPage]) -> str:
+    """Markdown: how many wrong OCR pages each safety net catches, and what it costs in false alarms."""
+    lines = [
+        "# Safety-net evaluation (YomiToku reads)",
+        "",
+        f"{len(pages)} silver pages x {len(CONDITIONS)} conditions. A page is *wrong* when the OCR table differs "
+        "from the silver reference. *Accounting checks* = a check failed (what existed before this phase). "
+        "*Label* = vocabulary check flagged a label. *Reads* = read agreement flagged a difference. "
+        "*Any new* = label or reads. *False alarms* = right pages flagged.",
+        "",
+        "Caveats: silver is not gold; one company; label list built from the same company's filings.",
+        "",
+    ]
+    for name, runs in variants.items():
+        lines += [
+            f"## {name}",
+            "",
+            "| Condition | Pages | Wrong | Accounting checks | Label | Reads | Checks + new | False alarms (right pages) | Finding precision |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for cond in [*CONDITIONS, "all"]:
+            rs = [r for r in runs if cond == "all" or r.condition == cond]
+            wrong = [r for r in rs if r.wrong]
+            right = [r for r in rs if not r.wrong]
+            flagged = sum(r.label_flags + r.agree_flags for r in rs)
+            hits = sum(r.label_hits + r.agree_hits for r in rs)
+            lines.append(
+                f"| {cond} | {len(rs)} | {len(wrong)} | {sum(r.checks_fail for r in wrong)} "
+                f"| {sum(r.label_flags > 0 for r in wrong)} | {sum(r.agree_flags > 0 for r in wrong)} "
+                f"| {sum(r.checks_fail or r.label_flags > 0 or r.agree_flags > 0 for r in wrong)} "
+                f"| {sum(r.label_flags > 0 or r.agree_flags > 0 for r in right)}/{len(right)} "
+                f"| {hits}/{flagged} |"
+            )
+        lines.append("")
     return "\n".join(lines)

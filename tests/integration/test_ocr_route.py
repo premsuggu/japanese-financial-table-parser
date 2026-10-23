@@ -136,3 +136,29 @@ def test_table_pasted_as_a_picture_on_a_text_page_goes_to_ocr(tmp_path, truth):
 )
 def test_clean_text(raw, expected):
     assert clean_text(raw) == expected
+
+
+def test_verify_two_reads_of_a_scan_agree_and_are_recorded(scanned_pdf, sim):
+    table = parse_source(scanned_pdf, ocr=sim, verify=True)
+    assert table.meta["reads"] == 2 and table.meta["read_findings"] == []
+    checks = {f.check: f.status for f in validate_tables([table])}
+    assert checks["read_agreement"] == "PASS"
+
+
+def test_verify_flags_a_digit_the_second_read_got_wrong(scanned_pdf):
+    first = load_page(CORRECTED_PDF, 0)
+    amount = next(
+        w.text for w in first.words if w.text.replace(",", "").isdigit() and len(w.text) > 5
+    )
+    engine = SimulatedOcr(first, wrong_on_call={2: (amount, "9" + amount[1:])})
+    table = parse_source(scanned_pdf, ocr=engine, verify=True)
+    findings = table.meta["read_findings"]
+    assert len(findings) == 1 and findings[0].status == "WARN"
+    assert summarize(validate_tables([table]))["WARN"] >= 1
+
+
+def test_verify_compares_the_text_layer_with_ocr():
+    engine = SimulatedOcr(load_page(CORRECTED_PDF, 0))
+    table = parse_source(CORRECTED_PDF, ocr=engine, verify=True)
+    assert table.meta["route"] == "text-layer" and table.meta["read_findings"] == []
+    assert len(engine.calls) == 1

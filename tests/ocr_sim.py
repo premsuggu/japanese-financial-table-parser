@@ -12,6 +12,8 @@ import random
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+import pymupdf
+
 from fin_table_parser.models import PageGeometry
 from fin_table_parser.ocr import OcrBatch, PixelWord
 
@@ -28,14 +30,29 @@ class SimulatedOcr:
     seed: int = 0
     name: str = "simulated"
     calls: list[int] = field(default_factory=list)
+    wrong_on_call: dict[int, tuple[str, str]] = field(
+        default_factory=dict
+    )  # call number -> (from, to)
 
     def read_images(self, images: Sequence[bytes]) -> OcrBatch:
-        self.calls.extend(len(i) for i in images)
-        return OcrBatch(pages=[self._words() for _ in images], page_seconds=[0.0] * len(images))
+        pages = []
+        for image in images:
+            self.calls.append(len(image))
+            # boxes are in the pixel frame of the image actually given (it may have been rescaled)
+            scale = pymupdf.Pixmap(image).width / (self.geom.width * self.dpi / 72.0)
+            words = self._words(scale)
+            swap = self.wrong_on_call.get(len(self.calls))
+            if swap:
+                words = [
+                    PixelWord(swap[1] if w.text == swap[0] else w.text, w.x0, w.y0, w.x1, w.y1)
+                    for w in words
+                ]
+            pages.append(words)
+        return OcrBatch(pages=pages, page_seconds=[0.0] * len(images))
 
-    def _words(self) -> list[PixelWord]:
+    def _words(self, scale: float = 1.0) -> list[PixelWord]:
         rng = random.Random(self.seed)
-        k = self.dpi / 72.0
+        k = self.dpi / 72.0 * scale
         angle = math.radians(self.skew_deg)
         cos_a, sin_a = math.cos(angle), math.sin(angle)
         ox, oy = self.geom.width / 2, self.geom.height / 2

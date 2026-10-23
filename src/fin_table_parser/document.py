@@ -44,18 +44,22 @@ def parse_document(
     progress: Callable[[int, int], None] | None = None,
     ocr: OcrEngine | None = None,
     force_ocr: bool = False,
+    verify: bool = False,
 ) -> list[PageResult]:
     """Parse the given pages (default: all) and report a result for each.
 
     With an OCR engine, a page whose text layer is unusable (a scan) is read through OCR;
-    ``force_ocr`` sends every page through OCR.
+    ``force_ocr`` sends every page through OCR. ``verify`` reads each page a second time and records
+    where the two reads differ.
     """
     total = page_count(source)
     wanted = list(range(total)) if pages is None else [p for p in pages if 0 <= p < total]
     results: list[PageResult] = []
     for done, page_no in enumerate(wanted, start=1):
         try:
-            table = parse_source(source, page_no, strategy, ocr=ocr, force_ocr=force_ocr)
+            table = parse_source(
+                source, page_no, strategy, ocr=ocr, force_ocr=force_ocr, verify=verify
+            )
             if looks_like_statement(table):
                 results.append(PageResult(page_no, table, route=str(table.meta.get("route", ""))))
             else:

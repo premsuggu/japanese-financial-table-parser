@@ -78,6 +78,17 @@ def render_page(
         return bytes(pix.tobytes("png"))
 
 
+def rescale_image(data: bytes, factor: float) -> bytes:
+    """The same picture at ``factor`` times the pixel size (JPEG stays JPEG, else PNG)."""
+    pix = pymupdf.Pixmap(data)
+    resized = pymupdf.Pixmap(
+        pix, max(1, round(pix.width * factor)), max(1, round(pix.height * factor))
+    )
+    if data[:2] == b"\xff\xd8":
+        return bytes(resized.tobytes("jpeg", jpg_quality=90))
+    return bytes(resized.tobytes("png"))
+
+
 def baseline_find_tables(pdf_path: str | Path, page_no: int = 0) -> list[list[str]]:
     """Rows from PyMuPDF's built-in ``find_tables()`` (used only as an evaluation baseline)."""
     with pymupdf.open(str(pdf_path)) as doc:

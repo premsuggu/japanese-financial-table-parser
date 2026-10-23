@@ -35,6 +35,7 @@ def run_parse(
     strategy: str,
     engine_name: str,
     force_ocr: bool,
+    verify: bool,
 ) -> list[PageResult]:
     engine = available_engines().get(engine_name)
     return parse_document(
@@ -43,6 +44,7 @@ def run_parse(
         strategy=strategy,  # type: ignore[arg-type]
         ocr=engine,
         force_ocr=force_ocr,
+        verify=verify,
     )
 
 
@@ -51,7 +53,7 @@ def preview(data: bytes, page_no: int) -> bytes:
     return render_page(data, page_no)
 
 
-STATUS_ICON = {"ok": "✅", "check": "⚠️", "unsupported": "🚧", "unverified": "❔"}
+STATUS_ICON = {"ok": "✅", "review": "👁️", "check": "⚠️", "unsupported": "🚧", "unverified": "❔"}
 STATUS_COLOR = {
     "PASS": "#2e7d32",
     "PASS_ROUNDING": "#9e8600",
@@ -79,6 +81,13 @@ with st.sidebar:
         "Scanned pages",
         ["no OCR", *engines],
         help="OCR engine used when a page has no usable text layer (a scan).",
+    )
+    verify = st.checkbox(
+        "Read twice and compare",
+        value=False,
+        disabled=engine_name == "no OCR",
+        help="Reads each page a second time (OCR against the text layer, or OCR at another size) and"
+        " flags the cells where the reads differ. Doubles the OCR time.",
     )
     with st.expander("Advanced"):
         force_ocr = st.checkbox(
@@ -113,6 +122,7 @@ with st.spinner(f"Reading {len(wanted) if wanted else total} page(s)…"):
         strategy,
         engine_name if engine_name != "no OCR" else "",
         force_ocr,
+        verify,
     )
 
 shown = select_results(results, scope)
@@ -171,6 +181,11 @@ for tab, result in zip(tabs, shown, strict=False):
             st.info(
                 "No accounting check could run on this table, so its numbers are not verified."
                 " Compare it with the page image."
+            )
+        elif state == "review":
+            st.info(
+                "Read by OCR and not double-checked: the numbers add up, but a misread label would not"
+                " show in the checks. Compare with the page image, or turn on 'Read twice and compare'."
             )
         elif state == "check":
             st.warning("Some accounting checks do not hold. See the Checks tab.")

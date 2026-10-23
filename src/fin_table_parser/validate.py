@@ -30,6 +30,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from .hierarchy import parent_indices
+from .labelcheck import check_labels, load_lexicon
 from .labels import ASSETS_TOTAL, LIABILITIES_EQUITY_TOTALS, component_sign, label_key
 from .models import Finding, Row, Status, Table
 from .normalize import nfkc
@@ -46,10 +47,27 @@ def validate_tables(tables: Sequence[Table]) -> list[Finding]:
         findings += check_unparsed_cells(table)
         findings += check_totals(table)
         findings += check_net_rows(table)
+        findings += check_read_quality(table)
     findings += check_formulas(tables)
     findings += check_ties(tables)
     if any(t.kind == "balance_sheet" for t in tables):
         findings += check_balance_identity(tables)
+    return findings
+
+
+def check_read_quality(table: Table) -> list[Finding]:
+    """Checks that only apply to OCR pages: a misspelt label, and disagreement between two reads."""
+    findings: list[Finding] = []
+    if str(table.meta.get("route", "")).startswith("ocr"):
+        findings += check_labels(table, load_lexicon())
+    read_findings = table.meta.get("read_findings")
+    if isinstance(read_findings, list):
+        findings += read_findings
+        if not read_findings:
+            name = table.statement or table.source
+            findings.append(
+                Finding("read_agreement", "PASS", name, "", "", detail="two reads agree")
+            )
     return findings
 
 

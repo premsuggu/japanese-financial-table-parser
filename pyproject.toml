@@ -13,7 +13,7 @@ dependencies = ["pymupdf", "openpyxl", "pyyaml"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-fin_table_parser = ["rules/*.yaml"]
+fin_table_parser = ["rules/*.yaml", "data/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

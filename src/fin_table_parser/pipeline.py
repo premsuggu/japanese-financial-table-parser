@@ -7,7 +7,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
-from .models import PageGeometry, Table
+from .crosscheck import compare_reads
+from .models import Finding, PageGeometry, Table
 from .ocr import OcrEngine, ocr_geometry
 from .pdf_io import PdfSource, image_coverage, load_page
 from .strategies.banded import extract_banded
@@ -22,7 +23,10 @@ def parse_geometry(geom: PageGeometry, source: str = "", strategy: Strategy = "a
     """Parse one page's geometry. ``auto`` uses row bands when the page has them, else words only."""
     if strategy == "banded" or (strategy == "auto" and count_bands(geom) >= MIN_BANDS):
         check_banded(geom)
-        return extract_banded(geom, source=source)
+        try:
+            return extract_banded(geom, source=source)
+        except ValueError as exc:  # bands that do not form columns: not a table this strategy reads
+            raise UnsupportedPage(f"banded layout not usable: {exc}") from exc
     check_text_layer(geom)
     return _extract_text(geom, source)
 
@@ -54,16 +58,21 @@ def parse_source(
     strategy: Strategy = "auto",
     ocr: OcrEngine | None = None,
     force_ocr: bool = False,
+    verify: bool = False,
 ) -> Table:
     """Parse one page, using the text layer when it is usable and OCR otherwise.
 
     The route is recorded in ``table.meta["route"]`` ("text-layer" or "ocr:<engine>").
+    With ``verify`` the page is read a second time (OCR against the text layer, or OCR at another
+    pixel size) and the differences are kept in ``table.meta["read_findings"]``.
     """
     name = Path(pdf).name if isinstance(pdf, str | Path) else "upload.pdf"
     if not force_ocr:
         try:
             table = parse_geometry(load_page(pdf, page_no), name, strategy)
             table.meta["route"] = "text-layer"
+            if verify and ocr is not None:
+                _second_read(table, pdf, page_no, ocr, name, rescale=1.0)
             return table
         except UnsupportedPage as exc:
             if ocr is None or not _needs_ocr(str(exc), lambda: image_coverage(pdf, page_no)):
@@ -72,7 +81,36 @@ def parse_source(
         raise UnsupportedPage("OCR requested but no OCR engine is available")
     table = parse_ocr_words(ocr_geometry(pdf, page_no, ocr), name)
     table.meta["route"] = f"ocr:{ocr.name}"
+    if verify:
+        _second_read(table, pdf, page_no, ocr, name, rescale=SECOND_READ_SCALE)
     return table
+
+
+# The second read of a scan is the same picture at another pixel size: a different input for the
+# engine, so its random mistakes tend to differ from the first read's.
+SECOND_READ_SCALE = 0.75
+
+
+def _second_read(
+    table: Table, pdf: PdfSource, page_no: int, ocr: OcrEngine, name: str, rescale: float
+) -> None:
+    """Read the page again and record every disagreement with ``table`` (never raises)."""
+    try:
+        second = parse_ocr_words(ocr_geometry(pdf, page_no, ocr, rescale=rescale), name)
+        findings = compare_reads(table, second)
+    except UnsupportedPage as exc:
+        findings = [
+            Finding(
+                "read_agreement",
+                "WARN",
+                table.statement,
+                "",
+                "",
+                detail=f"second read failed: {exc}",
+            )
+        ]
+    table.meta["reads"] = 2
+    table.meta["read_findings"] = findings
 
 
 IMAGE_PAGE_SHARE = 0.5  # an image covering this much of the page may hold the table

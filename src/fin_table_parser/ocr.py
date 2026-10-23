@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .models import PageGeometry, Word
-from .pdf_io import PdfSource, page_size, render_page
+from .pdf_io import PdfSource, page_size, render_page, rescale_image
 
 OCR_DPI = 300
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -151,8 +151,19 @@ def geometry_from_words(
 
 
 def ocr_geometry(
-    source: PdfSource, page_no: int, engine: OcrEngine, dpi: int = OCR_DPI
+    source: PdfSource, page_no: int, engine: OcrEngine, dpi: int = OCR_DPI, rescale: float = 1.0
 ) -> PageGeometry:
-    """Rasterise a page, run OCR, and return it as a words-only ``PageGeometry``."""
+    """Rasterise a page, run OCR, and return it as a words-only ``PageGeometry``.
+
+    ``rescale`` reads the same picture at another pixel size (a second, partly independent read);
+    the boxes are mapped back to the unscaled frame so both reads are comparable.
+    """
     png = render_page(source, page_no, dpi=dpi)
-    return geometry_from_words(source, page_no, read_one(engine, png), dpi)
+    if rescale == 1.0:
+        return geometry_from_words(source, page_no, read_one(engine, png), dpi)
+    words = read_one(engine, rescale_image(png, rescale))
+    back = [
+        PixelWord(w.text, w.x0 / rescale, w.y0 / rescale, w.x1 / rescale, w.y1 / rescale)
+        for w in words
+    ]
+    return geometry_from_words(source, page_no, back, dpi)

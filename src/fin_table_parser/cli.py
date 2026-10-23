@@ -109,6 +109,46 @@ def _cmd_ocr_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_safety_eval(args: argparse.Namespace) -> int:
+    from .ocr import available_engines
+    from .ocr_eval import (
+        RESCALES,
+        collect_reads,
+        find_silver_pages,
+        labels_by_document,
+        render_safety,
+        safety_runs,
+    )
+
+    engines = available_engines()
+    if args.engine not in engines:
+        print(f"engine {args.engine!r} not available: {sorted(engines)}", file=sys.stderr)
+        return 2
+    pdfs = sorted(Path(args.corpus).glob("*/*.pdf"))
+    pages = find_silver_pages(pdfs, args.limit, one_per_document=not args.every_page)
+    reads = collect_reads(engines[args.engine], pages, Path(args.cache))
+    per_doc = labels_by_document(pdfs)
+    from .labelcheck import load_lexicon
+
+    full = {p.pdf.parent.name: load_lexicon() for p in pages}
+    others = {
+        d: frozenset(set().union(*(v for k, v in per_doc.items() if k != d))) for d in per_doc
+    }
+    variants = {}
+    for factor in (f for f in RESCALES if f != 1.0):
+        variants[f"second read at {factor}x pixels, label list = shipped list"] = safety_runs(
+            pages, reads, full, factor
+        )
+        variants[f"second read at {factor}x pixels, label list without the page's own document"] = (
+            safety_runs(pages, reads, others, factor)
+        )
+    report = render_safety(variants, pages)
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.output).write_text(report, encoding="utf-8")
+    print(report)
+    return 0
+
+
 def truth_page(truth_path: str) -> int:
     import json
 
@@ -139,6 +179,16 @@ def main(argv: list[str] | None = None) -> int:
     o.add_argument("--limit", type=int, default=6, help="number of silver pages to use")
     o.add_argument("-o", "--output", default="docs/reports/ocr-comparison.md")
     o.set_defaults(func=_cmd_ocr_eval)
+    sf = sub.add_parser("safety-eval", help="how many wrong OCR pages do the extra checks catch")
+    sf.add_argument("--engine", default="yomitoku")
+    sf.add_argument("--corpus", default="data/corpus/yamato")
+    sf.add_argument("--limit", type=int, default=6)
+    sf.add_argument(
+        "--every-page", action="store_true", help="every silver page, not one per document"
+    )
+    sf.add_argument("--cache", default="data/cache/yomitoku_reads.json")
+    sf.add_argument("-o", "--output", default="docs/reports/phase3-metrics.md")
+    sf.set_defaults(func=_cmd_safety_eval)
     u = sub.add_parser("ui", help="open the upload-a-PDF web page")
     u.add_argument("--port", type=int, default=8501)
     u.set_defaults(func=_cmd_ui)

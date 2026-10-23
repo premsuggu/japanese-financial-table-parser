@@ -184,8 +184,20 @@ def _write_validation(ws: Worksheet, findings: Sequence[Finding]) -> None:
 
 
 def _write_metadata(ws: Worksheet, tables: Sequence[Table]) -> None:
-    ws.append(["Statement", "Unit", "Source", "Page", "Revision", "Rows", "Period ends"])
-    for c in range(1, 8):
+    ws.append(
+        [
+            "Statement",
+            "Unit",
+            "Source",
+            "Page",
+            "Revision",
+            "Rows",
+            "Period ends",
+            "Read via",
+            "Reads",
+        ]
+    )
+    for c in range(1, 10):
         ws.cell(row=1, column=c).font = Font(bold=True)
     for t in tables:
         ws.append(
@@ -197,5 +209,7 @@ def _write_metadata(ws: Worksheet, tables: Sequence[Table]) -> None:
                 str(t.meta.get("revision") or ""),
                 len(t.rows),
                 ", ".join(p or "?" for p in t.periods),
+                str(t.meta.get("route") or ""),
+                int(str(t.meta.get("reads") or 1)),
             ]
         )

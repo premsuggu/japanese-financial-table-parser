@@ -11,3 +11,4 @@ output/
 *.pdf
 data/corpus/*/
 docs/chat.md
+data/cache/

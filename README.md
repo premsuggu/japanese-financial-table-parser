@@ -14,6 +14,7 @@ Metadata sheet.
 | Text-layer PDFs (balance sheet, income statement, cash flow, comprehensive income) | working; whole sample filing: 80 checks, 0 failures |
 | Accounting checks (balance identity, totals, statement formulas) | working; rules live in `src/fin_table_parser/rules/statement_rules.yaml` |
 | Scanned pages (OCR route, YomiToku) | working on simulated scans; about 93-97% of cells right, not every page exact |
+| OCR safety net (read twice and compare, label vocabulary) | on 22 test pages, caught all 15 wrong OCR pages (accounting checks alone: 10); 8 of 51 right pages flagged. Opt-in, doubles OCR time |
 | Upload UI | working, localhost only |
 | Grid-ruled pages (equity statement, notes), note-number columns | not supported |
 | Other companies, real scans | not yet tested |
@@ -42,10 +43,11 @@ python -m fin_table_parser parse in.pdf -o output/in.xlsx --page 0   # one page 
 python -m fin_table_parser check output/in.xlsx                 # re-run the accounting checks on a workbook
 python -m fin_table_parser evaluate in.pdf truth.json -o docs/reports/metrics.md
 python -m fin_table_parser ocr-eval --engines yomitoku --limit 6     # OCR comparison on the corpus
+python -m fin_table_parser safety-eval --every-page --limit 100 --cache data/cache/reads.json   # how well the OCR safety net works
 ```
 
 In the UI each table gets a health state: **ok** (a real accounting check passed), **check** (a check failed),
-**unverified** (no check applies) or **unsupported** (layout not handled). Pages read by OCR deserve a human look.
+**review** (read by OCR and not double-checked), **unverified** (no check applies) or **unsupported** (layout not handled). Tick "Read twice and compare" to double-check OCR pages.
 
 ## How it works (one paragraph)
 
@@ -69,7 +71,7 @@ AGENT.md                working rules for the coding agent (binding)
 ## Quality gates
 
 ```
-python -m pytest -q      # 156 tests with the sample PDFs; 78 are skipped without them (see data/README.md)
+python -m pytest -q      # 170 tests with the sample PDFs; those needing them are skipped without (see data/README.md)
 ruff check src tests && ruff format --check src tests
 mypy
 ```
