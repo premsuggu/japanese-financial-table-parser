@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv*/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+output/
+
+# third-party documents (company filings): not redistributed, see data/README.md
+*.pdf
+data/corpus/*/
+docs/chat.md

@@ -1,0 +1,41 @@
+# Documentation index
+
+Goal: given a PDF page with a Japanese consolidated balance sheet (layout may vary, may be scanned), extract the
+table with row labels, values, columns, hierarchy, units and accounting signs, with no hard-coded coordinates.
+
+Start with the top-level [../README.md](../README.md), then the project status in [worklog/phase2-worklog.md](worklog/phase2-worklog.md), then the explanation
+documents in the order below.
+
+## Explanations (how it works, for a new developer)
+
+| # | Document | Topic |
+|---|---|---|
+| 1 | [explanations/01-how-the-parser-works.md](explanations/01-how-the-parser-works.md) | the row-band strategy, hierarchy, value conventions |
+| 2 | [explanations/02-accounting-checks.md](explanations/02-accounting-checks.md) | why checks exist, rounding tolerance, fault injection |
+| 3 | [explanations/03-band-free-core-and-ocr-route.md](explanations/03-band-free-core-and-ocr-route.md) | words-only strategy, footnote markers, hybrid OCR routing |
+| 4 | [explanations/04-the-ui.md](explanations/04-the-ui.md) | the upload page |
+
+## Research and plans
+
+| Document | Topic |
+|---|---|
+| [research/01-table-parser-landscape.md](research/01-table-parser-landscape.md) | survey of industry table parsers and recommendation |
+| [plans/phase1-implementation-plan.md](plans/phase1-implementation-plan.md) | original Phase 1 proposal (scope later narrowed) |
+| [plans/phase2-plan.md](plans/phase2-plan.md) | validation, band-free core, hybrid OCR, evaluation |
+
+## Work logs and reports (what happened, measured)
+
+| Document | Topic |
+|---|---|
+| [worklog/phase1-worklog.md](worklog/phase1-worklog.md) | Phase 1: problems found and fixed |
+| [worklog/phase2-worklog.md](worklog/phase2-worklog.md) | Phase 2: same, plus current status |
+| [worklog/installed-packages.md](worklog/installed-packages.md) | every install, its reason, and what can be removed |
+| [reports/phase1-metrics.md](reports/phase1-metrics.md) | metrics of the sample page against the ground truth |
+| [reports/ocr-comparison.md](reports/ocr-comparison.md) | OCR engine bake-off (YomiToku vs PaddleOCR) |
+| [review/ground-truth-review.md](review/ground-truth-review.md) | the ground truth laid out for human review |
+
+## Code map
+
+`src/fin_table_parser/`: `pdf_io` (only module touching PyMuPDF) -> `strategies/{banded,textgeom}` -> `models` ->
+`validate` + `rules/` -> `export` / `xlsx_reader`; `pipeline` chooses text layer or OCR (`ocr`); `document` and
+`ui_model` / `app` serve the UI; `evaluate`, `report`, `ocr_eval` measure quality. Tests mirror this under `tests/`.

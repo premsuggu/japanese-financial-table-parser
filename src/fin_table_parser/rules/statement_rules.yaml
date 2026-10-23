@@ -1,0 +1,42 @@
+# Accounting identities per statement type, in a small readable syntax.
+#
+#   expr:  "TARGET = TERM + TERM - TERM"        (spaces around + and - are required)
+#   A TERM or TARGET may list alternative labels with "|" (first row that starts with one of
+#   them and has a value is used). A trailing "?" marks an optional term (used only if present).
+#   Labels are matched on their start, after NFKC normalisation and removing spaces, so
+#   "営業利益" matches "営業利益又は営業損失（△）".
+#
+# Tolerance for a formula is the number of printed figures involved: every figure is rounded
+# to the unit on its own, so a total can differ from its parts by about one unit per figure.
+#
+# ties compare the SAME quantity printed in two statements: exact, unless advisory
+# (advisory ties give WARN, not FAIL, because the two figures can legitimately differ).
+
+formulas:
+  # ---- income statement ----
+  - {id: gross_profit,      kinds: [income_statement], expr: "売上総利益|売上総損失 = 売上高 - 売上原価"}
+  - {id: operating_profit,  kinds: [income_statement], expr: "営業利益|営業損失 = 売上総利益|売上総損失 - 販売費及び一般管理費合計|販売費及び一般管理費"}
+  - {id: ordinary_profit,   kinds: [income_statement], expr: "経常利益|経常損失 = 営業利益|営業損失 + 営業外収益合計 - 営業外費用合計"}
+  - {id: pretax_profit,     kinds: [income_statement], expr: "税金等調整前当期純利益|税金等調整前当期純損失|税引前当期純利益|税引前当期純損失 = 経常利益|経常損失 + 特別利益合計 - 特別損失合計"}
+  - {id: income_taxes_total, kinds: [income_statement], expr: "法人税等合計 = 法人税、住民税及び事業税 + 法人税等調整額"}
+  - {id: net_income,        kinds: [income_statement], expr: "当期純利益|当期純損失 = 税金等調整前当期純利益|税金等調整前当期純損失|税引前当期純利益|税引前当期純損失 - 法人税等合計"}
+  - {id: parent_net_income, kinds: [income_statement], expr: "親会社株主に帰属する当期純利益|親会社株主に帰属する当期純損失 = 当期純利益|当期純損失 - 非支配株主に帰属する当期純利益|非支配株主に帰属する当期純損失"}
+
+  # ---- comprehensive income (also present inside a combined 損益及び包括利益計算書) ----
+  - {id: comprehensive_income, kinds: [comprehensive_income, income_statement], expr: "包括利益 = 当期純利益|当期純損失 + その他の包括利益合計"}
+
+  # ---- cash flow (rows can sit on two pages: terms are looked up across all cash-flow tables) ----
+  - {id: cash_change, kinds: [cash_flow], expr: "現金及び現金同等物の増減額 = 営業活動によるキャッシュ・フロー + 投資活動によるキャッシュ・フロー + 財務活動によるキャッシュ・フロー + 現金及び現金同等物に係る換算差額?"}
+  - {id: cash_end,    kinds: [cash_flow], expr: "現金及び現金同等物の期末残高 = 現金及び現金同等物の期首残高 + 現金及び現金同等物の増減額 + 新規連結に伴う現金及び現金同等物? + 連結の範囲の変更に伴う現金及び現金同等物? + 連結除外に伴う現金及び現金同等物? + 合併に伴う現金及び現金同等物?"}
+
+ties:
+  - id: cashflow_pretax_equals_income_statement
+    left:  {kind: cash_flow,        label: "税金等調整前当期純利益|税金等調整前当期純損失|税引前当期純利益|税引前当期純損失"}
+    right: {kind: income_statement, label: "税金等調整前当期純利益|税金等調整前当期純損失|税引前当期純利益|税引前当期純損失"}
+  - id: comprehensive_income_net_equals_income_statement
+    left:  {kind: comprehensive_income, label: "当期純利益|当期純損失"}
+    right: {kind: income_statement,     label: "当期純利益|当期純損失"}
+  - id: cashflow_cash_equals_balance_sheet_cash
+    advisory: true   # restricted / time deposits make these differ in some companies
+    left:  {kind: cash_flow,     label: "現金及び現金同等物の期末残高"}
+    right: {kind: balance_sheet, label: "現金及び預金"}

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fin_table_parser"
+version = "0.1.0"
+description = "Rule-based parser for Japanese financial-statement tables in born-digital PDFs"
+requires-python = ">=3.10"
+dependencies = ["pymupdf", "openpyxl", "pyyaml"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fin_table_parser = ["rules/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # line wrapping is handled by `ruff format`
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["pymupdf.*", "openpyxl.*", "yaml.*", "pandas.*", "streamlit.*"]
+ignore_missing_imports = true
+
+
+[[tool.mypy.overrides]]
+module = ["fin_table_parser.pdf_io"]
+disallow_untyped_calls = false

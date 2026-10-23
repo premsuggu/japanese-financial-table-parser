@@ -1,0 +1,14 @@
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+# The page handles financial documents: keep it reachable from this machine only.
+address = "localhost"
+maxUploadSize = 200
+
+[theme]
+base = "light"
+primaryColor = "#1F4E78"
