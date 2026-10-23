@@ -69,7 +69,7 @@ AGENT.md                working rules for the coding agent (binding)
 ## Quality gates
 
 ```
-python -m pytest -q      # 156 tests
+python -m pytest -q      # 156 tests with the sample PDFs; 78 are skipped without them (see data/README.md)
 ruff check src tests && ruff format --check src tests
 mypy
 ```
