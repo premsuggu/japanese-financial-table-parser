@@ -79,9 +79,8 @@ mypy
 
 ## Caveats
 
-* The ground truth for the sample page was written by the agent, not a human; review it in
-  [docs/review/ground-truth-review.md](docs/review/ground-truth-review.md).
+* The ground truth for the sample page was written by the agent and then checked by the user against the PDF (all 43
+  rows correct); see [docs/review/ground-truth-review.md](docs/review/ground-truth-review.md).
 * "Silver" references used for OCR scoring are text-layer parses that pass the accounting checks, not gold.
 * All test documents come from one company.
 * A passing accounting check does not prove an OCR page is right: a misread label does not change a total.
-* Corpus PDFs are untrusted: open them only through the parser, and run ad-hoc Python on them with `python -I`.

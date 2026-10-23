@@ -70,6 +70,6 @@
   nothing in `~/.cache/huggingface` or `~/.cache/torch` that this project did not create may be touched.
 - The UI handles financial documents: it must stay bound to localhost.
 - Corpus PDFs in `data/corpus/` are untrusted input: run ad-hoc Python that reads them with `python -I`.
-- Ground truth in `tests/fixtures/ground_truth/` was written by the agent and awaits human review; do not present
-  scores against it as independent.
+- Ground truth in `tests/fixtures/ground_truth/` was written by the agent and then reviewed by the user against the PDF
+  (all 43 rows correct). Other references ("silver") are parser output and are not independent.
 - Docs hygiene: update the README status table and the work log after each task; keep explanations and work logs separate.
