@@ -17,6 +17,7 @@ from .models import Value
 # Dash-like characters that mean "nil" when they are the whole cell (after NFKC).
 _NIL = {"-", "−", "–", "—", "―", "ー"}
 _NEGATIVE_MARKERS = "△▲"
+_MINUS_SIGNS = "-−–—―‐‑"  # hyphen-minus, minus sign U+2212, dashes: a minus when digits follow
 _NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+|\d+")
 _DATE = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日")
 
@@ -58,7 +59,7 @@ def parse_value(raw: str) -> Value | None:
         negative, s = True, s[1:]
     elif s[0] == "(" and s[-1] == ")":
         negative, s = True, s[1:-1]
-    elif s[0] == "-":
+    elif s[0] in _MINUS_SIGNS:
         negative, s = True, s[1:]
     if not _NUMBER.fullmatch(s):
         return Value(raw=raw, number=None, kind="text", notes=notes)

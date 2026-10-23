@@ -27,13 +27,34 @@ def join_words(words: Sequence[Word]) -> str:
     return out
 
 
+_ENGLISH_UNITS = {"thousand": "千円", "million": "百万円", "billion": "十億円"}
+_BARE_UNIT = re.compile(r"[(（]?\s*(百万円|千円|億円|円)\s*[)）]?")
+
+
+def find_unit(line: str) -> str | None:
+    """The currency unit a line announces, in Japanese form: ``（単位：百万円）``, ``(単位 千円)``,
+    a bare ``（千円）`` or ``(Unit: millions of yen)``. None when the line is not a unit line."""
+    text = nfkc(line).strip()
+    m = re.search(r"単位\s*[:：]?\s*([^）)\s]+)", text)
+    if m:
+        return m.group(1).strip()
+    if _BARE_UNIT.fullmatch(text):
+        return _BARE_UNIT.fullmatch(text).group(1)  # type: ignore[union-attr]
+    m = re.search(r"(thousand|million|billion)s?\s+of\s+yen", text, re.IGNORECASE)
+    if m:
+        return _ENGLISH_UNITS[m.group(1).lower()]
+    if re.fullmatch(r"[(（]?\s*(?:unit\s*:?\s*)?(?:in\s+)?yen\s*[)）]?", text, re.IGNORECASE):
+        return "円"
+    return None
+
+
 def unit_and_statement(lines: Sequence[str]) -> tuple[str | None, str]:
     unit: str | None = None
     candidates: list[str] = []
     for line in lines:
-        m = re.search(r"単位[:：]\s*([^）)]+)", nfkc(line))
-        if m:
-            unit = m.group(1).strip()
+        found = find_unit(line)
+        if found:
+            unit = found
         else:
             candidates.append(line)
     # Only a line that names a statement counts; a continuation page has no title, and its

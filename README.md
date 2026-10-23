@@ -16,10 +16,11 @@ Metadata sheet.
 | Scanned pages (OCR route, YomiToku) | working on simulated scans; about 93-97% of cells right, not every page exact |
 | OCR safety net (read twice and compare, label vocabulary) | on 22 test pages, caught all 15 wrong OCR pages (accounting checks alone: 10); 8 of 51 right pages flagged. Opt-in, doubles OCR time |
 | Upload UI | working, localhost only |
-| Grid-ruled pages (equity statement, notes), note-number columns | not supported |
-| Other companies, real scans | not yet tested |
+| Note-number column, wrapped labels, two-panel account form, IFRS totals | supported (tested on synthetic pages only) |
+| Grid-ruled pages (equity statement, notes) | not supported; OCR on grid pages gives wrong cells |
+| Other companies, real scans | not yet tested; OCR merges two-line column headers on tight layouts (periods can be wrong) |
 
-Details and numbers: [docs/worklog/phase2-worklog.md](docs/worklog/phase2-worklog.md).
+Details and numbers: [docs/worklog/phase4-worklog.md](docs/worklog/phase4-worklog.md) (latest), [phase3](docs/worklog/phase3-worklog.md), [phase2](docs/worklog/phase2-worklog.md).
 
 ## Install
 
@@ -71,7 +72,7 @@ AGENT.md                working rules for the coding agent (binding)
 ## Quality gates
 
 ```
-python -m pytest -q      # 170 tests with the sample PDFs; those needing them are skipped without (see data/README.md)
+python -m pytest -q      # 184 tests with the sample PDFs; those needing them are skipped without (see data/README.md)
 ruff check src tests && ruff format --check src tests
 mypy
 ```

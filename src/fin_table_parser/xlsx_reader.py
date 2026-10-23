@@ -44,7 +44,8 @@ def _read_sheet(ws: Worksheet) -> Table:
 
     labels: list[str] = []
     levels: list[int] = []
-    drafts: list[tuple[RowType, list[Value | None], list[bool], bool]] = []
+    drafts: list[tuple[RowType, list[Value | None], list[bool], bool, str]] = []
+
     for cells in ws.iter_rows(min_row=HEADER_ROW + 1, values_only=True):
         if all(c is None for c in cells):
             continue
@@ -75,6 +76,7 @@ def _read_sheet(ws: Worksheet) -> Table:
                 values,
                 [cells[und_start + j] == "yes" for j in range(n_cols)],
                 cells[rule_col] == "yes",
+                str(cells[rule_col + 1] or "") if len(cells) > rule_col + 1 else "",
             )
         )
 
@@ -89,8 +91,9 @@ def _read_sheet(ws: Worksheet) -> Table:
             row_type=row_type,
             rule_above=rule_above,
             underlined=underlined,
+            note_ref=note_ref,
         )
-        for i, (row_type, values, underlined, rule_above) in enumerate(drafts)
+        for i, (row_type, values, underlined, rule_above, note_ref) in enumerate(drafts)
     ]
     meta_revision = ws["B4"].value
     if ws["A5"].value == "Statement":

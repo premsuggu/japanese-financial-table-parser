@@ -6,6 +6,7 @@ Swapping the PDF library (for example to pdfplumber, MIT licensed) means rewriti
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pymupdf
 
@@ -76,6 +77,36 @@ def render_page(
         if jpeg_quality is not None:
             return bytes(pix.tobytes("jpeg", jpg_quality=jpeg_quality))
         return bytes(pix.tobytes("png"))
+
+
+def degrade_image(
+    data: bytes, blur: int = 1, noise: float = 12.0, shade: float = 0.25, seed: int = 0
+) -> bytes:
+    """A photographed-scan look: box blur, grey noise and uneven lighting (darker towards one corner).
+
+    For evaluating OCR only. Needs numpy, which the main package does not otherwise use.
+    """
+    import numpy as np
+
+    pix = pymupdf.Pixmap(data)
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pix) if pix.n != 3 or pix.alpha else pix
+    img: Any = (
+        np.frombuffer(pix.samples, dtype=np.uint8)
+        .reshape(pix.height, pix.width, 3)
+        .astype(np.float32)
+    )
+    if blur > 0:
+        k = 2 * blur + 1
+        padded = np.pad(img, ((blur, blur), (blur, blur), (0, 0)), mode="edge")
+        img = sum(
+            padded[dy : dy + pix.height, dx : dx + pix.width] for dy in range(k) for dx in range(k)
+        ) / (k * k)
+    rng = np.random.default_rng(seed)
+    img = img + rng.normal(0.0, noise, img.shape[:2])[..., None]
+    ramp = np.linspace(1.0, 1.0 - shade, pix.width, dtype=np.float32)[None, :, None]
+    img = np.clip(img * ramp, 0, 255).astype(np.uint8)
+    out = pymupdf.Pixmap(pymupdf.csRGB, pix.width, pix.height, img.tobytes(), False)
+    return bytes(out.tobytes("jpeg", jpg_quality=50))
 
 
 def rescale_image(data: bytes, factor: float) -> bytes:

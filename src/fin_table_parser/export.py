@@ -95,7 +95,7 @@ def _write_table(ws: Worksheet, table: Table) -> None:
         + list(table.headers)
         + [f"Raw: {h}" for h in table.headers]
         + [f"Underlined: {h}" for h in table.headers]
-        + ["Rule above"]
+        + ["Rule above", "Note ref"]
     )
     for c, text in enumerate(headers, start=1):
         cell = ws.cell(row=HEADER_ROW, column=c, value=text)
@@ -120,6 +120,7 @@ def _write_table(ws: Worksheet, table: Table) -> None:
             underlined = j < len(row.underlined) and row.underlined[j]
             ws.cell(row=r, column=und_start + j, value="yes" if underlined else None)
         ws.cell(row=r, column=rule_col, value="yes" if row.rule_above else None)
+        ws.cell(row=r, column=rule_col + 1, value=row.note_ref or None)
         _style_row(ws, r, row.row_type, rule_col)
 
     for c in range(1, rule_col + 1):

@@ -36,6 +36,11 @@ LIABILITIES_EQUITY_TOTALS = {
     "負債純資産合計",
     "負債及び純資産合計",
     "負債・純資産合計",
+    # IFRS statement of financial position
+    "負債及び資本合計",
+    "負債・資本合計",
+    "負債資本合計",
+    "負債及び株主資本合計",
 }
 
 

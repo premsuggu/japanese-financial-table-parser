@@ -84,6 +84,9 @@ class Row:
     rule_above: bool = False
     underlined: list[bool] = field(default_factory=list)
     label_x0: float = 0.0
+    note_ref: str = (
+        ""  # the 注記 (note number) printed beside the label, when the page has that column
+    )
 
 
 @dataclass

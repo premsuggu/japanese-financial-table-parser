@@ -23,16 +23,22 @@ from .labels import edit_distance, label_key
 from .models import Table
 from .normalize import parse_value
 from .ocr import OcrEngine, PixelWord, geometry_from_words
-from .pdf_io import page_texts, render_page, rescale_image
+from .pdf_io import degrade_image, page_texts, render_page, rescale_image
 from .pipeline import parse_ocr_words, parse_page
 from .triage import UnsupportedPage
 from .validate import summarize, validate_tables
 
-Condition = dict[str, float | int | None]
+Condition = dict[str, float | int | bool | None]
 CONDITIONS: dict[str, Condition] = {
     "clean (300 dpi)": {"dpi": 300, "rotate_deg": 0.0, "jpeg_quality": None},
     "scan-like (150 dpi, JPEG q40)": {"dpi": 150, "rotate_deg": 0.0, "jpeg_quality": 40},
     "skewed (1 degree)": {"dpi": 300, "rotate_deg": 1.0, "jpeg_quality": None},
+    "photo-like (150 dpi, blur, noise, uneven light)": {
+        "dpi": 150,
+        "rotate_deg": 0.5,
+        "jpeg_quality": 60,
+        "degrade": True,
+    },
 }
 
 
@@ -165,22 +171,28 @@ class Bakeoff:
         }
 
 
+def condition_image(page: SilverPage, cond: Condition) -> bytes:
+    """The page as a picture under one test condition (resolution, rotation, compression, degradation)."""
+    degrade = bool(cond.get("degrade"))
+    image = render_page(
+        page.pdf,
+        page.page_no,
+        dpi=int(cond["dpi"] or 300),
+        rotate_deg=float(cond["rotate_deg"] or 0.0),
+        jpeg_quality=None
+        if degrade
+        else (int(cond["jpeg_quality"]) if cond["jpeg_quality"] else None),
+    )
+    return degrade_image(image) if degrade else image
+
+
 def run_bakeoff(engines: Sequence[OcrEngine], pages: Sequence[SilverPage]) -> Bakeoff:
     """One batch call per engine and condition: the model loads once, pages are timed separately."""
     out = Bakeoff()
     for engine in engines:
         for name, cond in CONDITIONS.items():
             dpi = int(cond["dpi"] or 300)
-            images = [
-                render_page(
-                    p.pdf,
-                    p.page_no,
-                    dpi=dpi,
-                    rotate_deg=float(cond["rotate_deg"] or 0.0),
-                    jpeg_quality=int(cond["jpeg_quality"]) if cond["jpeg_quality"] else None,
-                )
-                for p in pages
-            ]
+            images = [condition_image(p, cond) for p in pages]
             try:
                 batch = engine.read_images(images)
             except Exception as exc:  # noqa: BLE001 - the whole call failed: every page fails
@@ -217,20 +229,10 @@ def collect_reads(
             name, cond, factor = key.split("|")
             reads[(name, cond, float(factor))] = [PixelWord(*w) for w in words]
     for cname, cond in CONDITIONS.items():
-        dpi = int(cond["dpi"] or 300)
         todo = [p for p in pages for f in factors if (p.name, cname, f) not in reads]
         if not todo:
             continue
-        images = {
-            p.name: render_page(
-                p.pdf,
-                p.page_no,
-                dpi=dpi,
-                rotate_deg=float(cond["rotate_deg"] or 0.0),
-                jpeg_quality=int(cond["jpeg_quality"]) if cond["jpeg_quality"] else None,
-            )
-            for p in pages
-        }
+        images = {p.name: condition_image(p, cond) for p in pages}
         for f in factors:
             missing = [p for p in pages if (p.name, cname, f) not in reads]
             if not missing:

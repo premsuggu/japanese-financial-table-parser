@@ -75,6 +75,8 @@ def table_frame(table: Table, numeric: bool = False) -> pd.DataFrame:
     separators (-2,979) and "nil" for an empty dash. Blank cells are empty strings, never "None".
     """
     data: dict[str, list[str]] = {"Label": [INDENT * r.level + r.label for r in table.rows]}
+    if any(r.note_ref for r in table.rows):
+        data["Note"] = [r.note_ref for r in table.rows]
     for c, header in enumerate(table.headers):
         col: list[str] = []
         for r in table.rows:
