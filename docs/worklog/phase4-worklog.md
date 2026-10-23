@@ -36,6 +36,31 @@ form, but:
 * grid-ruled pages read through OCR give wrong cells (`1,000` read as `1`), with no check failing (health "unverified").
 * a wrapped label's amount went missing once; a check flagged it.
 
+## Addendum: one real filing of another company
+
+A command that was meant to be a download attempt (the user declined it) had in fact already saved four PDFs to
+`data/corpus/others/`. Three held only cover pages and were deleted; the fourth, Link-U Group's IFRS 決算短信 (26 pages,
+see `data/corpus/README.md`), is a real unseen-company test. The unchanged parser gave 7 statement tables and **9 false
+FAILs**. The causes and fixes:
+
+| Cause | Fix |
+|---|---|
+| page numbers (`-4-`, `14-`) read as an amount row, "cannot read '-4-' as a number" | an end line whose cells do not read as numbers, or that holds only a dash, is not part of the table (`textgeom._reads_as_amounts`) |
+| the J-GAAP rule 営業利益 = 売上総利益 - 販管費 failed on an IFRS income statement (other income / expenses are inside operating profit) | formulas can now say `requires` / `excludes`; IFRS formulas added for operating, pre-tax and net profit (`rules/statement_rules.yaml`) |
+| header "(自 2023年8月1日 至 2024年7月31日)" with the years on their own line became a data row and the columns had no period | a line that says 自/至 or 年/月 and whose only numbers are years is header text (`textgeom.is_period_line`) |
+
+Two further causes surfaced when the tables were checked together: the year tokens of that header line also created
+two empty phantom columns on the comprehensive-income page (years are now ignored when finding columns), and a formula
+looked up its terms in another table (a reconciliation page repeating the labels), so formulas now prefer the target's
+own table and the gross-profit rule accepts 売上収益 as well as 売上高.
+
+After the fixes: 0 FAIL on all 7 tables (34 checks passed); the income statement has periods 2024-07-31 / 2025-07-31 and 17 rows. Regression
+tests: `tests/integration/test_other_company.py`, `test_layouts.py::test_a_page_number_under_the_table_is_not_a_row`,
+`test_rules.py::test_ifrs_income_statement_uses_its_own_operating_profit_formula`. Only the accounting checks verify
+this filing (no ground truth), and it is one filing, so this is evidence of progress, not proof of generality.
+Pages 17 and 19 (IFRS transition reconciliations with four columns) are read as balance sheets and pass the column
+totals, but the reconciliation identity (IFRS = Japanese GAAP + reclassification + difference) is not checked.
+
 ## Not done
 
 Other companies' real filings; independent (XBRL) ground truth; real scanned PDFs. The synthetic pages show the code

@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--workdir", default="output")
     e.set_defaults(func=_cmd_evaluate)
     o = sub.add_parser("ocr-eval", help="compare OCR engines against text-layer parses")
-    o.add_argument("--engines", default="paddle,yomitoku")
+    o.add_argument("--engines", default="yomitoku")
     o.add_argument("--corpus", default="data/corpus/yamato")
     o.add_argument("--limit", type=int, default=6, help="number of silver pages to use")
     o.add_argument("-o", "--output", default="docs/reports/ocr-comparison.md")

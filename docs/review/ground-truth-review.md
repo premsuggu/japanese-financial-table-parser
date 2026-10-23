@@ -79,3 +79,5 @@ using the row numbers below. I will fix the JSON, re-run the evaluation and tell
 | 42 | › 資産合計 | total | 7,534,110 | 5,135,249 | |
 
 Numbers to verify: 74 (non-empty cells).
+
+**Review result:** the user checked the PDF page against all 43 rows of this sheet and found them all correct.

@@ -19,3 +19,11 @@ untrusted data: nothing here is executed, and Python that reads them runs with `
 
 No XBRL was offered on the IR page. Same company throughout, so layout variety is limited to the
 document types above; other companies are still untested.
+
+## Second company (added after the first corpus)
+
+| Directory | Document | Notes |
+|---|---|---|
+| others/jpx_44460 | Link-U Group (code 4446), correction notice of the FY2025 (July 2025) 決算短信 [IFRS] (consolidated), 26 pages. Source: https://www2.jpx.co.jp/disc/44460/140120250926563381.pdf (JPX/TDnet disclosure) | IFRS (statement of financial position with three columns: transition date, prior and current year), income statement with other income / other expenses inside operating profit, header years printed on a separate line, page numbers `-4-` under the tables. Found two real bugs, fixed in Phase 4 (see docs/worklog/phase4-worklog.md). Not checked against a ground truth: accounting checks only |
+
+Three more small JPX / Fujitsu PDFs that were downloaded with it held only cover pages and were deleted.

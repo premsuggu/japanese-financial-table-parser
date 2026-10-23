@@ -18,7 +18,8 @@ Metadata sheet.
 | Upload UI | working, localhost only |
 | Note-number column, wrapped labels, two-panel account form, IFRS totals | supported (tested on synthetic pages only) |
 | Grid-ruled pages (equity statement, notes) | not supported; OCR on grid pages gives wrong cells |
-| Other companies, real scans | not yet tested; OCR merges two-line column headers on tight layouts (periods can be wrong) |
+| Other companies | one extra real filing tested (IFRS, 26 pages): 0 failed checks after fixes; no ground truth for it. OCR merges two-line column headers on tight layouts (periods can be wrong) |
+| Real scanned PDFs | not tested (none available); scans are simulated |
 
 Details and numbers: [docs/worklog/phase4-worklog.md](docs/worklog/phase4-worklog.md) (latest), [phase3](docs/worklog/phase3-worklog.md), [phase2](docs/worklog/phase2-worklog.md).
 
@@ -65,14 +66,16 @@ src/fin_table_parser/   the package (pdf_io, strategies/, pipeline, ocr, validat
 tests/                  unit + integration tests (pytest); ground truth in tests/fixtures/
 tools/ocr/              worker scripts run inside the OCR virtual environment
 docs/                   explanations, plans, work logs, reports, review (index: docs/README.md)
-data/corpus/            public test PDFs (untrusted input; see data/corpus/README.md)
+data/corpus/            public test PDFs, included (untrusted input; see data/README.md and data/corpus/README.md)
+output/                 parser output for every test PDF (Excel) + summary table
+report.pdf, chat.pdf    one-page project report; the conversation the project was built in (tools/make_report.py, tools/text_to_pdf.py)
 AGENT.md                working rules for the coding agent (binding)
 ```
 
 ## Quality gates
 
 ```
-python -m pytest -q      # 184 tests with the sample PDFs; those needing them are skipped without (see data/README.md)
+python -m pytest -q      # 189 tests (the PDFs are in the repository; tests skip cleanly if they are removed)
 ruff check src tests && ruff format --check src tests
 mypy
 ```
@@ -82,5 +85,5 @@ mypy
 * The ground truth for the sample page was written by the agent and then checked by the user against the PDF (all 43
   rows correct); see [docs/review/ground-truth-review.md](docs/review/ground-truth-review.md).
 * "Silver" references used for OCR scoring are text-layer parses that pass the accounting checks, not gold.
-* All test documents come from one company.
+* Test documents: twelve PDFs of one company and one IFRS filing of another (accounting checks only, no ground truth). They are public filings of third parties, included for testing; treat them as untrusted input and run ad-hoc Python on them with `python -I`.
 * A passing accounting check does not prove an OCR page is right: a misread label does not change a total.

@@ -116,3 +116,10 @@ def test_account_form_with_two_panels_is_read_as_one_statement():
     checks = {f.check: f.status for f in validate_tables([table])}
     assert checks["assets_equal_liabilities_equity"] == "PASS"
     assert summarize(validate_tables([table]))["FAIL"] == 0
+
+
+def test_a_page_number_under_the_table_is_not_a_row():
+    for footer in ("- 4 -", "14-", "－ 4 －"):
+        table = parse(Layout(footer=footer))
+        assert len(table.rows) == len(J_GAAP), footer
+        assert summarize(validate_tables([table]))["FAIL"] == 0, footer

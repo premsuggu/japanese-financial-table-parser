@@ -34,6 +34,10 @@ class Layout:
     note_header: str = ""  # e.g. "注記": adds a note-number column
     wrap_labels_top_aligned: bool = False
     grid: bool = False
+    footer: str = ""  # a page number printed under the table, e.g. "- 4 -"
+    period_header_lines: bool = (
+        False  # years on their own line: "(自 年8月1日 至 年7月31日)" + "2025 2026"
+    )
     lines: list[Line] = field(default_factory=list)
 
 
@@ -131,6 +135,8 @@ def make_pdf(layout: Layout | None = None, lines: list[Line] | None = None) -> b
         if layout.note_header and line.note:
             text(cols[0] - 100, text_y, line.note, right=True)
         y += height
+    if layout.footer:
+        text(300, y + 40, layout.footer)
     if layout.grid:
         for k in range(len(rows) + 1):
             yy = top - 10 + k * PITCH

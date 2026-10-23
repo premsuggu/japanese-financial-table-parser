@@ -5,10 +5,5 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
-output/
 
-# third-party documents (company filings): not redistributed, see data/README.md
-*.pdf
-data/corpus/*/
-docs/chat.md
 data/cache/

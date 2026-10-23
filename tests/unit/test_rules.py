@@ -132,3 +132,25 @@ def test_unreadable_number_is_a_failure_not_a_silent_zero():
     table = make_table("balance_sheet", [(0, "現金", "※12,121,360"), (0, "注", "あり")])
     statuses = [f.status for f in check_unparsed_cells(table)]
     assert statuses == ["FAIL", "WARN"]  # digits present -> FAIL; plain text -> WARN
+
+
+def test_ifrs_income_statement_uses_its_own_operating_profit_formula():
+    from fin_table_parser.models import Table
+    from fin_table_parser.validate import validate_tables
+
+    from .test_validate import make_table
+
+    spec = [
+        (0, "売上収益", "1,000"),
+        (0, "売上原価", "400"),
+        (0, "売上総利益", "600"),
+        (0, "販売費及び一般管理費", "300"),
+        (0, "その他の収益", "50"),
+        (0, "その他の費用", "20"),
+        (0, "営業利益", "330"),
+    ]
+    table: Table = make_table(spec, "連結損益計算書")
+    table.kind = "income_statement"
+    checks = {f.check: f.status for f in validate_tables([table])}
+    assert checks["operating_profit_ifrs"] == "PASS"
+    assert "operating_profit" not in checks  # the J-GAAP formula does not apply to this layout

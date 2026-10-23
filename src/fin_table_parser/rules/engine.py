@@ -39,6 +39,10 @@ class Formula:
     kinds: tuple[str, ...]
     target: tuple[str, ...]
     terms: tuple[Term, ...]
+    requires: tuple[str, ...] = ()  # the formula applies only when one of these rows is present
+    excludes: tuple[
+        str, ...
+    ] = ()  # ... and not when one of these is (a different accounting layout)
 
 
 @dataclass(frozen=True)
@@ -92,7 +96,16 @@ def load_rules() -> Rules:
     formulas = []
     for item in raw["formulas"]:
         target, terms = parse_expr(item["expr"])
-        formulas.append(Formula(item["id"], tuple(item["kinds"]), target, terms))
+        formulas.append(
+            Formula(
+                item["id"],
+                tuple(item["kinds"]),
+                target,
+                terms,
+                _labels(item.get("requires", "")),
+                _labels(item.get("excludes", "")),
+            )
+        )
     ties = [
         Tie(
             item["id"],
@@ -158,6 +171,10 @@ def check_formulas(tables: Sequence[Table]) -> list[Finding]:
         found = find_row(tables, formula.kinds, formula.target)
         if found is None:
             continue  # rule does not apply to these tables
+        if formula.requires and find_row(tables, formula.kinds, formula.requires) is None:
+            continue
+        if formula.excludes and find_row(tables, formula.kinds, formula.excludes) is not None:
+            continue
         t_table, t_row = found
         for col, header in enumerate(t_table.headers):
             actual = signed_value(t_row, col)
@@ -166,7 +183,10 @@ def check_formulas(tables: Sequence[Table]) -> list[Finding]:
             period = t_table.periods[col]
             total, used, missing = 0, [], []
             for term in formula.terms:
-                hit = find_row(tables, formula.kinds, term.labels)
+                # prefer the target's own table: a page of reconciliations or notes can repeat the labels
+                hit = find_row([t_table], formula.kinds, term.labels) or find_row(
+                    tables, formula.kinds, term.labels
+                )
                 tcol = _column_in(hit[0], period, col) if hit else None
                 value = signed_value(hit[1], tcol) if hit and tcol is not None else None
                 if value is None:

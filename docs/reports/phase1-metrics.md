@@ -2,7 +2,7 @@
 
 ## Ground truth
 
-- Written by Claude: values from the PDF plain-text dump (the same text layer the parser reads), indent level / row type / underlines from the rendered page image. Written after the parser's rows had been displayed, so it is not blind to the parser output. Values were not re-read from the pixels. Not yet reviewed by a human.
+- Written by Claude: values from the PDF plain-text dump (the same text layer the parser reads), indent level / row type / underlines from the rendered page image. Written after the parser's rows had been displayed, so it is not blind to the parser output. Values were not re-read from the pixels. Later reviewed by the user against the PDF: all 43 rows correct.
 - 43 rows x 2 value columns
 
 ## 1. Parser vs ground truth (measured on the Excel file, i.e. end to end)

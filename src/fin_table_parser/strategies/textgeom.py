@@ -166,6 +166,20 @@ def panel_boundary(
     return min(starts) - h if len(starts) >= MIN_PANEL_LINES else None
 
 
+YEAR_RANGE = range(1900, 2101)
+
+
+def is_period_line(line: Line) -> bool:
+    """A header line describing the accounting period: it says 自/至 or 年/月 and its only numbers are years."""
+    text = "".join(w.text for w in line.words)
+    if not ("自" in text or "至" in text or ("年" in text and "月" in text)):
+        return False
+    numbers = [w for w in line.words if _is_amount(w)]
+    return bool(numbers) and all(
+        w.text.isascii() and w.text.isdigit() and int(w.text) in YEAR_RANGE for w in numbers
+    )
+
+
 def nearest(x: float, centres: Sequence[float]) -> int:
     return min(range(len(centres)), key=lambda i: abs(centres[i] - x))
 
@@ -180,7 +194,7 @@ def extract_text(geom: PageGeometry, source: str = "") -> Table:
     words = [w for ln in lines for w in ln.words]
 
     # ---- columns and the lines that carry amounts
-    amount_words = [w for w in words if _is_amount(w)]
+    amount_words = [w for ln in lines if not is_period_line(ln) for w in ln.words if _is_amount(w)]
     columns = find_columns(amount_words, h)
     if not columns:
         raise NoTableFound("no right-aligned column of amounts")
@@ -199,6 +213,8 @@ def extract_text(geom: PageGeometry, source: str = "") -> Table:
     zone_left = columns[0] - col_width  # left edge of the first value column
 
     def amount_tokens(line: Line) -> list[Word]:
+        if is_period_line(line):  # "(自 2023年8月1日 至 2024年7月31日)": its years are not amounts
+            return []
         # An amount must sit over a value column; a page number or a stray figure elsewhere
         # is further from every column than half a column width.
         return [
@@ -221,13 +237,24 @@ def extract_text(geom: PageGeometry, source: str = "") -> Table:
         return _extract_panels(
             replace(geom, words=[w for w in words if id(w) not in cut]), boundary, source, above
         )
+    # A page number printed at the foot or head ("- 4 -", "14-") looks like amounts over a column;
+    # a line at either end whose cells do not read as numbers is not part of the table.
+    while len(amount_lines) > 3 and not _reads_as_amounts(
+        lines[amount_lines[-1]], amount_tokens, columns
+    ):
+        amount_lines.pop()
+    while len(amount_lines) > 3 and not _reads_as_amounts(
+        lines[amount_lines[0]], amount_tokens, columns
+    ):
+        amount_lines.pop(0)
     first, last = amount_lines[0], amount_lines[-1]
     cys = [lines[i].cy for i in amount_lines]
     pitch = statistics.median(b - a for a, b in zip(cys, cys[1:], strict=False))
 
     # ---- header block, title block and where the body starts
     def over_values(line: Line) -> list[Word]:
-        return [w for w in line.words if not _is_amount(w) and w.cx > zone_left]
+        keep_numbers = is_period_line(line)
+        return [w for w in line.words if (keep_numbers or not _is_amount(w)) and w.cx > zone_left]
 
     def is_unit_line(line: Line) -> bool:
         return find_unit("".join(w.text for w in line.words)) is not None
@@ -338,6 +365,23 @@ def extract_text(geom: PageGeometry, source: str = "") -> Table:
 
 def _names_statement(text: str) -> bool:
     return any(k in nfkc(text) for k in STATEMENT_KEYWORDS)
+
+
+def _reads_as_amounts(
+    line: Line, amount_tokens: Callable[[Line], list[Word]], columns: Sequence[float]
+) -> bool:
+    """True when each column's tokens on this line join into a number or a nil dash, and at least one
+    is a real number (a line holding only a dash at either end of the table is a stray mark)."""
+    cells: dict[int, list[Word]] = {}
+    for w in amount_tokens(line):
+        cells.setdefault(nearest(w.x1, columns), []).append(w)
+    kinds = []
+    for tokens in cells.values():
+        v = parse_value("".join(w.text for w in sorted(tokens, key=lambda w: w.x0)))
+        if v is None or v.kind == "text":
+            return False
+        kinds.append(v.kind)
+    return "number" in kinds
 
 
 def _extract_panels(

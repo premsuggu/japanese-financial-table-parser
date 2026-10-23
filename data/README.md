@@ -1,9 +1,11 @@
-# Test documents are not included
+# Test documents
 
-The sample PDFs are public filings of a third-party company and are not redistributed in this repository.
-Tests that need them are skipped when the files are missing. To run the full suite, put these in the project root:
+These are public filings of one company (ヤマト モビリティ & Mfg.株式会社, code 7886) and are included for testing.
+Source and per-file notes: [corpus/README.md](corpus/README.md).
 
-* `balance_sheet_after_correction.pdf`: page 3 of the company's 2026-06-26 correction notice (full-year, 連結貸借対照表)
-* `complete_pdf.pdf`: the full-year 決算短信
+* `balance_sheet_after_correction.pdf` (project root): the sample page, page 3 of the 2026-06-26 correction notice
+  (full-year, 連結貸借対照表). It is the page the ground truth in `tests/fixtures/ground_truth/` describes.
+* `complete_pdf.pdf` (project root): the full-year 決算短信.
+* `data/corpus/yamato/<id>/<id>.pdf`: ten more documents used for cross-checks and the OCR evaluation.
 
-and optionally download the corpus listed in [corpus/README.md](corpus/README.md) into `data/corpus/yamato/<id>/`.
+Parser output for all of them is in `output/`. The files are third-party documents: treat them as untrusted input.
